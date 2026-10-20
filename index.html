@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caza de Moscas Desencontrada</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: default;
+        }
+
+        /* Botón de Inicio Blanco en el Centro */
+        #btn-inicio {
+            padding: 18px 45px;
+            font-size: 1.6rem;
+            color: #ffffff;
+            background: transparent;
+            border: 2px solid #ffffff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
+            z-index: 10;
+        }
+
+        #btn-inicio:hover {
+            background-color: #ffffff;
+            color: #000000;
+            box-shadow: 0 0 35px rgba(255, 255, 255, 0.9);
+            transform: scale(1.08);
+        }
+
+        /* Controles Flotantes */
+        .controles {
+            display: none;
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            gap: 12px;
+            z-index: 20;
+        }
+
+        .btn-control {
+            padding: 10px 22px;
+            font-size: 0.95rem;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-control:hover {
+            background: #ffffff;
+            color: #000000;
+            transform: scale(1.05);
+        }
+
+        #btn-salir:hover {
+            background: rgba(255, 0, 85, 0.9);
+            border-color: #ff0055;
+            color: #ffffff;
+        }
+
+        /* Contenedor del Lienzo */
+        #canvas-container {
+            display: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Audio del Proyecto (Sustituye 'musica24.mp3' por tu archivo) -->
+    <audio id="miMusica" src="musica24.mp3" preload="auto" loop></audio>
+
+    <!-- Botón de Inicio Blanco centrado -->
+    <button id="btn-inicio">Inicio</button>
+
+    <!-- Controles flotantes -->
+    <div class="controles" id="panel-controles">
+        <button class="btn-control" id="btn-audio">🔊 Sonido: ON</button>
+        <button class="btn-control" id="btn-salir">Salir</button>
+    </div>
+
+    <!-- Contenedor del lienzo -->
+    <div id="canvas-container">
+        <canvas id="moscasCanvas"></canvas>
+    </div>
+
+    <script>
+        const btnInicio = document.getElementById('btn-inicio');
+        const btnSalir = document.getElementById('btn-salir');
+        const btnAudio = document.getElementById('btn-audio');
+        const panelControles = document.getElementById('panel-controles');
+        const canvasContainer = document.getElementById('canvas-container');
+        const canvas = document.getElementById('moscasCanvas');
+        const ctx = canvas.getContext('2d');
+        const audioElement = document.getElementById('miMusica');
+
+        let animacionId = null;
+        let activo = false;
+
+        // Estados del bucle: 'PERSECUSION', 'ESPERA'
+        let estado = 'PERSECUSION';
+        let tiempoEstado = 0;
+
+        let moscas = [];
+        let cazador = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            velocidadBase: 2.5,
+            angulo: 0,
+            golpeando: 0,
+            pasoCarrera: 0
+        };
+
+        function ajustarCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', () => {
+            if (activo) ajustarCanvas();
+        });
+
+        // Clase Mosquesita Pequeña
+        class Mosquita {
+            constructor() {
+                this.reiniciar();
+            }
+
+            reiniciar() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 6;
+                this.vy = (Math.random() - 0.5) * 6;
+                this.aleteo = 0;
+            }
+
+            actualizar() {
+                this.aleteo += 0.8;
+                this.x += this.vx + (Math.random() - 0.5) * 3;
+                this.y += this.vy + (Math.random() - 0.5) * 3;
+
+                // Rebotar bordes
+                if (this.x < 10 || this.x > canvas.width - 10) this.vx *= -1;
+                if (this.y < 10 || this.y > canvas.height - 10) this.vy *= -1;
+            }
+
+            dibujar() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = '#ffffff';
+
+                // Cuerpecito mosca
+                ctx.beginPath();
+                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Alitas aleteando rápido
+                let oscAla = Math.sin(this.aleteo) * 4;
+                ctx.beginPath();
+                ctx.ellipse(-3, -2 + oscAla * 0.2, 4, 2, Math.PI / 4, 0, Math.PI * 2);
+                ctx.ellipse(3, -2 - oscAla * 0.2, 4, 2, -Math.PI / 4, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        function generarMoscas() {
+            moscas = [];
+            for (let i = 0; i < 90; i++) { // Muchas moscas pequeñas
+                moscas.push(new Mosquita());
+            }
+        }
+
+        // Control del Botón de Audio (ON/OFF)
+        btnAudio.addEventListener('click', (e) => {
+            e.stopPropagation();
+            audioElement.muted = !audioElement.muted;
+            btnAudio.textContent = audioElement.muted ? "🔇 Sonido: OFF" : "🔊 Sonido: ON";
+        });
+
+        // Iniciar Animación
+        btnInicio.addEventListener('click', () => {
+            btnInicio.style.display = 'none';
+            panelControles.style.display = 'flex';
+            canvasContainer.style.display = 'block';
+
+            ajustarCanvas();
+            reiniciarBucle();
+            activo = true;
+
+            audioElement.currentTime = 0;
+            audioElement.muted = false;
+            btnAudio.textContent = "🔊 Sonido: ON";
+            audioElement.play().catch(err => console.log(err));
+
+            iniciarAnimacion();
+        });
+
+        // Salir
+        btnSalir.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activo = false;
+            if (animacionId) cancelAnimationFrame(animacionId);
+
+            audioElement.pause();
+            audioElement.currentTime = 0;
+
+            canvasContainer.style.display = 'none';
+            panelControles.style.display = 'none';
+            btnInicio.style.display = 'block';
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        function reiniciarBucle() {
+            estado = 'PERSECUSION';
+            tiempoEstado = Date.now();
+            generarMoscas();
+            cazador.x = canvas.width / 2;
+            cazador.y = canvas.height / 2;
+            cazador.velocidadBase = 2.5;
+            cazador.golpeando = 0;
+        }
+
+        // BUCLE PRINCIPAL
+        function iniciarAnimacion() {
+            if (!activo) return;
+
+            // Limpieza total (sin estela)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let ahora = Date.now();
+            let tiempoTranscurrido = (ahora - tiempoEstado) / 1000;
+
+            if (estado === 'PERSECUSION') {
+                // Aceleración continua: va cada vez más y más rápido
+                let velocidadActual = cazador.velocidadBase + (tiempoTranscurrido * 1.8);
+                cazador.pasoCarrera += velocidadActual * 0.1;
+
+                // Buscar la mosca más cercana para perseguirla
+                let moscaObjetivo = null;
+                let minDist = Infinity;
+
+                moscas.forEach(m => {
+                    m.actualizar();
+                    m.dibujar();
+
+                    let dist = Math.hypot(m.x - cazador.x, m.y - cazador.y);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        moscaObjetivo = m;
+                    }
+                });
+
+                // Mover cazador hacia la mosca
+                if (moscaObjetivo) {
+                    let dx = moscaObjetivo.x - cazador.x;
+                    let dy = moscaObjetivo.y - cazador.y;
+                    cazador.angulo = Math.atan2(dy, dx);
+
+                    cazador.x += Math.cos(cazador.angulo) * velocidadActual;
+                    cazador.y += Math.sin(cazador.angulo) * velocidadActual;
+
+                    // Si está muy cerca, asesta un golpe de matamoscas
+                    if (minDist < 45 && cazador.golpeando <= 0) {
+                        cazador.golpeando = 15;
+                    }
+                }
+
+                if (cazador.golpeando > 0) cazador.golpeando--;
+
+                // Dibujar cazador con matamoscas
+                dibujarCazador(cazador.x, cazador.y, cazador.angulo, cazador.pasoCarrera, cazador.golpeando);
+
+                // Tras 12 segundos corriendo desbocado, termina la persecución
+                if (tiempoTranscurrido > 12) {
+                    estado = 'ESPERA';
+                    tiempoEstado = ahora;
+                }
+            }
+            else if (estado === 'ESPERA') {
+                // 3 segundos de descanso con pantalla negra limpia
+                if (ahora - tiempoEstado > 3000) {
+                    reiniciarBucle();
+                }
+            }
+
+            animacionId = requestAnimationFrame(iniciarAnimacion);
+        }
+
+        // DIBUJAR CAZADOR Y MATAMOSCAS
+        function dibujarCazador(x, y, angulo, paso, golpe) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ffffff';
+
+            let oscPiernas = Math.sin(paso) * 16;
+
+            // Cabeza
+            ctx.beginPath();
+            ctx.arc(0, -28, 7, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Torso
+            ctx.beginPath();
+            ctx.moveTo(0, -21);
+            ctx.lineTo(0, -3);
+            ctx.stroke();
+
+            // Piernas corriendo
+            ctx.beginPath();
+            ctx.moveTo(0, -3);
+            ctx.lineTo(oscPiernas, 18);
+            ctx.moveTo(0, -3);
+            ctx.lineTo(-oscPiernas, 18);
+            ctx.stroke();
+
+            // Brazo con Matamoscas
+            let anguloMatamoscas = (golpe > 0) ? Math.PI / 3 : -Math.PI / 4;
+
+            ctx.save();
+            ctx.translate(0, -16);
+            ctx.rotate(angulo + anguloMatamoscas);
+
+            // Mango del matamoscas
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(35, 0);
+            ctx.stroke();
+
+            // Rejilla del matamoscas (Pala)
+            ctx.strokeRect(35, -10, 20, 20);
+            ctx.beginPath();
+            ctx.moveTo(45, -10); ctx.lineTo(45, 10);
+            ctx.moveTo(35, 0); ctx.lineTo(55, 0);
+            ctx.stroke();
+
+            ctx.restore();
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
